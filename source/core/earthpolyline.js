@@ -99,7 +99,7 @@ EarthPolyline.prototype.SetPoints = function(wgs84coords)
         p2[2]=wgs84coords[i+1][2];
         
         
-        var diff = [p2[0]-p1[0],p2[1]-p1[1],p2[2]-p2[2]];
+        var diff = [p2[0]-p1[0],p2[1]-p1[1],p2[2]-p1[2]];
         
         var merccoords = [];
         

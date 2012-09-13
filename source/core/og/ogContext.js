@@ -316,12 +316,15 @@ ogContext.prototype.ParseOptions = function(options)
    // a html5 canvasid is provided:
    if (options["canvas"])
    {
-      this.engine.InitEngine(options["canvas"], this.fullscreen);  // (canvasid, fullscreen)
+      this.engine.InitEngine(options["canvas"], this.fullscreen, options["webGlContext"]);  // (canvasid, fullscreen)
    }
    else
    {
       goog.debug.Logger.getLogger('owg.ogContext').warning("**ERROR: auto creating canvas is not supported yet!");
    }
+   
+   this.engine.SetSaveStateCallback(options["cbfSaveState"]);
+   this.engine.SetRestoreStateCallback(options["cbfRestoreState"]);
 
    this.engine.SetInitCallback(_ctx_callback_init);
    this.engine.SetTimerCallback(_ctx_callback_timer);

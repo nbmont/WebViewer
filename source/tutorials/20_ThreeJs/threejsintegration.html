@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<!--
+/*******************************************************************************
+#      ____               __          __  _      _____ _       _               #
+#     / __ \              \ \        / / | |    / ____| |     | |              #
+#    | |  | |_ __   ___ _ __ \  /\  / /__| |__ | |  __| | ___ | |__   ___      #
+#    | |  | | '_ \ / _ \ '_ \ \/  \/ / _ \ '_ \| | |_ | |/ _ \| '_ \ / _ \     #
+#    | |__| | |_) |  __/ | | \  /\  /  __/ |_) | |__| | | (_) | |_) |  __/     #
+#     \____/| .__/ \___|_| |_|\/  \/ \___|_.__/ \_____|_|\___/|_.__/ \___|     #
+#           | |                                                                #
+#           |_|                 _____ _____  _  __                             #
+#                              / ____|  __ \| |/ /                             #
+#                             | (___ | |  | | ' /                              #
+#                              \___ \| |  | |  <                               #
+#                              ____) | |__| | . \                              #
+#                             |_____/|_____/|_|\_\                             #
+#                                                                              #
+#                              (c) 2010-2011 by                                #
+#           University of Applied Sciences Northwestern Switzerland            #
+#                     Institute of Geomatics Engineering                       #
+#                           martin.christen@fhnw.ch                            #
+********************************************************************************
+*     Licensed under MIT License. Read the file LICENSE for more information   *
+*******************************************************************************/
+
+                      TUTORIAL 20: Integrating Three.js
+*******************************************************************************/
+-->
+<html lang="en">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+
+<script type="text/javascript" src="../../../external/closure-library/closure/goog/base.js"></script>
+<script type="text/javascript" src="../../../compiled/deps.js"></script>
+<script type="text/javascript">goog.require('owg.OpenWebGlobe');</script>
+
+<script type="text/javascript" src="three.min.js"></script>-->
+
+<script type="text/javascript">
+
+// Globals
+var renderer;
+var threeJsScene;
+var threeJsCamera;
+var materials = new Array();
+var savedState;
+
+// In this function we need to save off any states that three.js expects to stay the same.
+function OnSaveState(gl)
+{
+   saveState = {
+      depthTestEnabled: gl.getParameter(gl.DEPTH_TEST),
+      frontFace: gl.getParameter(gl.FRONT_FACE),
+      cullFace: gl.getParameter(gl.CULL_FACE_MODE),
+      vertexAttribEnabled: new Array()
+   };
+   
+   var maxVertexAttribs = gl.getParameter(gl.MAX_VERTEX_ATTRIBS);
+   
+   for (var i = 0; i < maxVertexAttribs; ++i)
+   {
+      saveState.vertexAttribEnabled[i] = gl.getVertexAttrib(i, gl.VERTEX_ATTRIB_ARRAY_ENABLED);
+   }
+}
+
+// Here we simply restore the states we stored off in OnSaveState
+function OnRestoreState(gl)
+{
+   if (saveState.depthTestEnabled)
+   {
+      gl.enable(gl.DEPTH_TEST);
+   }
+   else
+   {
+      gl.disable(gl.DEPTH_TEST);
+   }
+   
+   gl.frontFace(saveState.frontFace);
+   gl.cullFace(saveState.cullFace);
+   
+   for (var i = 0; i < saveState.vertexAttribEnabled.length; ++i)
+   {
+      if (saveState.vertexAttribEnabled[i])
+      {
+         gl.enableVertexAttribArray(i);
+      }
+      else
+      {
+         gl.disableVertexAttribArray(i);
+      }
+   }
+}
+
+//------------------------------------------------------------------------------
+// called every frame:
+function OnRender(context)
+{
+   threeJsCamera.position.set( 0, 300, 500 );
+   threeJsCamera.lookAt( threeJsScene.position );
+   renderer.render( threeJsScene, threeJsCamera );
+}
+
+//------------------------------------------------------------------------------
+
+function main()
+{
+   // Initialize three.js first, since we will be using its graphics context.
+   threeJsScene = new THREE.Scene();
+   threeJsCamera = new THREE.PerspectiveCamera( 50, window.innerWidth / window.innerHeight, 1, 1000 );
+   threeJsCamera.position.set( 0, 300, 500 );
+   threeJsScene.add( threeJsCamera );
+   
+   renderer = new THREE.WebGLRenderer( {
+      antialias: true,
+	  canvas: document.getElementById("canvas")
+   });
+   renderer.setSize( window.innerWidth, window.innerHeight );
+   renderer.autoClear = false;
+
+   var light = new THREE.DirectionalLight( 0xffffff, 2 );
+   light.position.set( 1, 1, 1 ).normalize();
+   threeJsScene.add( light );
+   
+   var light = new THREE.DirectionalLight( 0xffffff );
+   light.position.set( -1, -1, -1 ).normalize();
+   threeJsScene.add( light );
+   
+   var geometry = new THREE.CubeGeometry( 20, 20, 20 );
+   
+   for ( var i = 0; i < 500; i ++ ) {
+   
+	  materials[i] = new THREE.MeshLambertMaterial( { color: Math.random() * 0xffffff } );
+      var object = new THREE.Mesh( geometry, materials[i] );
+      
+      object.position.x = Math.random() * 800 - 400;
+      object.position.y = Math.random() * 800 - 400;
+      object.position.z = Math.random() * 800 - 400;
+      
+      object.rotation.x = ( Math.random() * 360 ) * Math.PI / 180;
+      object.rotation.y = ( Math.random() * 360 ) * Math.PI / 180;
+      object.rotation.z = ( Math.random() * 360 ) * Math.PI / 180;
+      
+      object.scale.x = Math.random() * 2 + 1;
+      object.scale.y = Math.random() * 2 + 1;
+      object.scale.z = Math.random() * 2 + 1;
+      
+      threeJsScene.add( object );
+   
+   }
+   
+   // Basic Open Web Globe setup with imagery and elevation
+   ogSetArtworkDirectory("http://www.openwebglobe.org/art/");
+   
+   var contextOptions =
+   {
+      webGlContext: renderer.getContext(),
+	  canvas: "canvas",
+	  fullscreen: true,
+	  cbfSaveState: OnSaveState,
+	  cbfRestoreState: OnRestoreState
+   };
+   
+   var ctx = ogCreateContext(contextOptions);
+   
+   var globe = ogCreateGlobe(ctx);
+   
+   var imgBlueMarble500 = 
+   {
+      url     : ["http://www.openwebglobe.org/data/img"],
+      layer   : "World500",
+      service : "i3d"
+   };
+   
+   var elvSRTM_CH = 
+   {
+      url     : ["http://www.openwebglobe.org/data/elv"],
+      layer   : "SRTM",
+      service : "i3d"
+   };
+   
+   ogAddImageLayer(globe, imgBlueMarble500);
+   ogAddElevationLayer(globe, elvSRTM_CH);
+
+   // (4) Set the "Render-Callback" function.
+   // The callback function will be called everytime a frame is drawn.
+   ogSetRenderFunction(ctx, OnRender);
+   
+   // (5) Set the background color
+   ogSetBackgroundColor(ctx, 0.2,0.2,0.7,1); 
+}
+//------------------------------------------------------------------------------
+   
+</script>
+
+</head>
+<body onload="main()" style="padding:0px; margin:0px; overflow:hidden;">
+   <div style="text-align: center">
+   <canvas id="canvas"></canvas>          
+   </div>
+</body>
+</html>

@@ -175,6 +175,10 @@ function engine3d()
    this.cbfKeyReleased = null;
    /** @type {?function(number,number,engine3d)} */
    this.cbfResize = null;
+   /** @type {?function(WebGLContext)} */
+   this.cbfSaveState = null;
+   /** @type {?function(WebGLContext)} */
+   this.cbfRestoreState = null;
 
    // flags
    /** @type {boolean} */
@@ -192,6 +196,7 @@ function engine3d()
 
    /** @type {WebGLRenderingContext} */
    this.gl = null;          // opengl context
+   this.glIsShared = false;
 
    this.context = null;
 
@@ -386,12 +391,16 @@ var create3DContext = function (canvas)
  * @description Initialize Engine
  * @param {string} canvasid The id of the webgl canvas
  * @param {boolean} bFullscreen True if the canvas should autofit the browser window
+ * @param {WebGLContext} webGlContext optional - existing webGL Context
  */
-engine3d.prototype.InitEngine = function (canvasid, bFullscreen)
+engine3d.prototype.InitEngine = function (canvasid, bFullscreen, webGlContext)
 {
+   this.canvasId = canvasid;
    var canvas = document.getElementById(canvasid);
 
-   this.gl = setupWebGL(canvas);
+   this.gl = webGlContext ? webGlContext : setupWebGL(canvas);
+   this.glIsShared = (webGlContext !== null);
+
    if (!this.gl)
    {
       return;
@@ -413,27 +422,8 @@ engine3d.prototype.InitEngine = function (canvasid, bFullscreen)
       this.bFullscreen = true;
    }
 
-   var names = [ "webgl", "experimental-webgl", "moz-webgl", "webkit-3d" ];
-   for (var i = 0; names.length > i; i++)
-   {
-      try
-      {
-         this.gl = canvas.getContext(names[i]);
-         if (this.gl)
-         {
-            break;
-         }
-      }
-      catch (e)
-      {
-      }
-   }
-   if (!this.gl)
-   {
-      alert("Can't find webgl context. It seems your browser is not compatible! For example, you can get the latest Firefox or Chrome");
-      return;
-   }
-
+   //setupWebGl(canvas);
+   
    this.InitGL();
 
    //disable context menu on canvas
@@ -457,13 +447,11 @@ engine3d.prototype.InitGL = function()
    // Call OnResize(canvas.width, canvas.height)
    this._resize(this.context.width, this.context.height);
 
-   // basic settings
-   this.gl.clearColor(0, 0, 0, 1);
-   this.gl.enable(this.gl.DEPTH_TEST);
-
-   this.gl.frontFace(this.gl.CCW);
-   //this.gl.cullFace(this.gl.FRONT_AND_BACK);
-   this.gl.cullFace(this.gl.BACK);
+   if (!this.glIsShared)
+   {
+      // If we're not sharing the context with another engine, just initialize the global states once.
+      InitGLState();
+   }
 
    //Init Shaders
    this.shadermanager = new ShaderManager(this.gl);
@@ -497,7 +485,20 @@ engine3d.prototype.InitGL = function()
    {
       window.requestAnimFrame(fncTimer, this.context); // request first frame
    }
+}
+//------------------------------------------------------------------------------
+/**
+ * Setup global WebGL states
+ */
+engine3d.prototype.InitGLState = function()
+{
+   // basic settings
+   this.gl.clearColor(0, 0, 0, 1);
+   this.gl.enable(this.gl.DEPTH_TEST);
 
+   this.gl.frontFace(this.gl.CCW);
+   //this.gl.cullFace(this.gl.FRONT_AND_BACK);
+   this.gl.cullFace(this.gl.BACK);
 }
 //------------------------------------------------------------------------------
 /**
@@ -1105,6 +1106,18 @@ function fncTimer()
             engine.cbfTimer(nMSeconds, engine);
          }
 
+         if (engine.cbfSaveState)
+         {
+            engine.cbfSaveState(engine.gl);
+         }
+         
+         if (engine.glIsShared)
+         {
+            // If we are sharing the GL context, we need to re-initialize our global state every frame
+            // in case it has been changed outside.
+            engine.InitGLState();
+         }
+
          // (2) Set Current Viewport and clear
          engine.SetViewport(0, 0, engine.width, engine.height);
          engine.Clear();
@@ -1122,11 +1135,18 @@ function fncTimer()
             ogLog("WebGL Error: " + error);
          }
 
+         // Give outside renderers a chance to restore their state
+         if (engine.cbfRestoreState)
+         {
+            engine.cbfRestoreState(engine.gl);
+         }
+         
          // (4) Call Render Callback (-> integrate in Scenegraph)
          if (engine.cbfRender)
          {
             engine.cbfRender(engine); // call  draw callback function
          }
+         
          if (typeof(window) != "undefined") //if owg runs in a webworker "window" is not available!
          {
             window.requestAnimFrame(fncTimer, engine.context);
@@ -1160,6 +1180,28 @@ engine3d.prototype._resize = function (w, h)
    {
       this.scene.nodeRenderObject.DoResize(w, h); // todo: move to scenegraph
    }
+}
+
+//------------------------------------------------------------------------------
+/**
+ * @description sets the save state callback function
+ *
+ * @param {function(WebGLContext)} f save state callback handler.
+ */
+engine3d.prototype.SetSaveStateCallback = function (f)
+{
+   this.cbfSaveState = f;
+}
+
+//------------------------------------------------------------------------------
+/**
+ * @description sets the restore state callback function
+ *
+ * @param {function(WebGLContext)} f save state callback handler.
+ */
+engine3d.prototype.SetRestoreStateCallback = function(f)
+{
+   this.cbfRestoreState = f;
 }
 
 //------------------------------------------------------------------------------
@@ -1643,6 +1685,8 @@ goog.exportProperty(engine3d.prototype, 'SetOrtho2D', engine3d.prototype.SetOrth
 goog.exportProperty(engine3d.prototype, 'SetProjectionMatrix', engine3d.prototype.SetProjectionMatrix);
 goog.exportProperty(engine3d.prototype, 'SetRenderCallback', engine3d.prototype.SetRenderCallback);
 goog.exportProperty(engine3d.prototype, 'SetResizeCallback', engine3d.prototype.SetResizeCallback);
+goog.exportProperty(engine3d.prototype, 'SetRestoreStateCallback', engine3d.prototype.SetRestoreStateCallback);
+goog.exportProperty(engine3d.prototype, 'SetSaveStateCallback', engine3d.prototype.SetSaveStateCallback);
 goog.exportProperty(engine3d.prototype, 'SetTimerCallback', engine3d.prototype.SetTimerCallback);
 goog.exportProperty(engine3d.prototype, 'SetViewMatrix', engine3d.prototype.SetViewMatrix);
 goog.exportProperty(engine3d.prototype, 'SetViewport', engine3d.prototype.SetViewport);
